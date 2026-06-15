@@ -4,20 +4,23 @@ from datetime import date
 
 @dataclass
 class MatchEvent:
-    match_id: str
     gameMode: str
     gameDuration: int
-    gameDate: date
+    gameDate: str
     champion: str
     kills: int
     deaths: int
     assists: int
     position: str
     win: bool
+    tier: str
+    rank: str
+    lp: int
+    numWins: int
+    numLosses: int
 
     def to_dict(self):
         return {
-            "match_id": self.match_id,
             "gameMode": self.gameMode,
             "gameDuration": self.gameDuration,
             "gameDate": self.gameDate,
@@ -27,4 +30,9 @@ class MatchEvent:
             "assists": self.assists,
             "position": self.position,
             "win": self.win,
+            "tier": self.tier,
+            "rank": self.rank,
+            "lp": self.lp,
+            "numWins": self.numWins,
+            "numLosses": self.numLosses
         }

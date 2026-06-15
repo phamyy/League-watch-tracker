@@ -9,19 +9,22 @@ class MatchState:
     def __init__(self):
         self.seen_matches = self._load_seen_matches()
 
-    def _load_seen_matches(self) -> set[str]:
+    def _load_seen_matches(self):
         if not STATE_FILE.exists():
             return set()
 
-        with open(STATE_FILE, "r") as file:
-            data = json.load(file)
+        try:
+            with open(STATE_FILE, "r") as file:
+                data = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.seen_matches = []
 
         return set(data)
 
     def has_seen(self, match_id: str) -> bool:
         return match_id in self.seen_matches
 
-    def add_match(self, match_id: str):
+    def add_match(self, match_id):
         self.seen_matches.add(match_id)
         self._save()
 

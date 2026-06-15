@@ -23,6 +23,17 @@ class RiotClient:
 
         return data["puuid"]
 
+    def get_summoner_rank(self, puuid: str):
+        url = (
+            f"https://na1.api.riotgames.com"
+            f"/lol/league/v4/entries/by-puuid/{puuid}"
+        )
+
+        summoner_response = requests.get(url, headers=self.headers)
+        summoner_response.raise_for_status()
+
+        return summoner_response.json()
+
     def get_recent_match_ids(
         self,
         puuid: str,
