@@ -1,10 +1,9 @@
 import time
 from datetime import datetime
 
-from config import GAME_NAME, TAG_LINE
-from models import MatchEvent
-from riot_client import RiotClient
-from state import MatchState
+from .config import GAME_NAME, TAG_LINE
+from .models import MatchEvent
+from .riot_client import RiotClient
 
 import psycopg2
 import json
@@ -15,28 +14,58 @@ from kafka import KafkaProducer
 POLL_INTERVAL = 60
 
 
+"""
+1. Change the start up so that even if services are not up and running, we wait for them to init and then connect so that it doesn't crash
+2. Change the connection string? kafka?
+
+
+"""
+
+
 class MatchProducer:
     def __init__(self):
+        print('Initializing Match Producer...')
         self.client = RiotClient()
-        self.state = MatchState()
+        print('RiotClient initialized')
 
-        self.connection = psycopg2.connect(
-            host="localhost",
-            port=5433,
-            database="riot_analytics",
-            user="riot",
-            password="riotpassword"
-        )
+        self.connection = self.connect_to_postgresql()
+        print('Postgresql initialized')
+
         self.cursor = self.connection.cursor()
 
-        try:
-            self.producer = KafkaProducer(
-                bootstrap_servers='localhost:9092',
-                value_serializer=lambda v: json.dumps(v).encode('utf-8')
-            )
-        except Exception as e:
-            print ('Waiting for Kafka')
-            time.sleep(10)
+        self.producer = self.connect_to_kafka()
+        print('Kafka initialized')
+    
+    def connect_to_kafka(self):
+        while True:
+            try:
+                producer = KafkaProducer(
+                    bootstrap_servers='kafka:9092',
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                )
+                print('Producer connected to Kafka')
+                return producer
+            
+            except Exception as e:
+                print ('Producer waiting for Kafka')
+                time.sleep(5)
+
+    def connect_to_postgresql(self):
+        while True:
+            try:
+                connection = psycopg2.connect(
+                    host="postgres",
+                    port=5432,
+                    database="riot_analytics",
+                    user="riot",
+                    password="riotpassword"
+                )
+                print('Producer connected to Postgresql')
+                return connection
+            except Exception as e:
+                print(f'Producer Postgresql unavailable: {e}')
+                time.sleep(5)
+
 
     def start(self):
         print("Starting Riot match producer...")
@@ -46,12 +75,14 @@ class MatchProducer:
             TAG_LINE
         )
 
+        print(f"PUUID: {puuid}")
+
         while True:
             try:
                 self.poll_matches(puuid)
 
             except Exception as error:
-                print(f"Producer error: {error}")
+                print(f"The error is occuring here: {error}")
 
             time.sleep(POLL_INTERVAL)
 
@@ -60,17 +91,28 @@ class MatchProducer:
             puuid,
             count=10
         )
+        self.cursor.execute("""
+                select match_id from raw_matches
+                """ )
 
-        for match_id in reversed(match_ids):
-            
+        existing_matches = [
+            row[0]
+            for row in self.cursor.fetchall()
+        ]
+
+        print(f"Existing Matches: {existing_matches}")
+        print(f"Type of existing matches: {type(existing_matches)}")
+        print(f"Matches Pulled from API: {match_ids}")
+        print(f"Type of matches pulled from API: {type(match_ids)}")
+
+        for match_id in match_ids:
             #if the match has been seen / ingested already, pass
-            # self.cursor.execute("""
-            #     select match_id from raw_matches
-            #     """ )
-            # match_ids = self.cursor.fetchall()
-            # if match_id in [match[0] for match in match_ids]:
-            #     pass
-
+            print(f"Now Evaluating: {match_id}")
+            if match_id in existing_matches:
+                print(f"{match_id} already contained in database")
+                continue
+            
+            print(f"now building match event for {match_id}")
             event = self.build_match_event(match_id)
 
             self.send_producer_data_to_kafka(match_id = match_id, payload= event.to_dict())
@@ -87,12 +129,13 @@ class MatchProducer:
         """
         Need to add in Summoner Rank + win / loss + LP -> need to add this to the model
         """
+        rank_data = self.client.get_summoner_rank(puuid=puuid)
 
-        tier = self.client.get_summoner_rank(puuid=puuid)[0]['tier']
-        rank = self.client.get_summoner_rank(puuid=puuid)[0]['rank']
-        lp = self.client.get_summoner_rank(puuid=puuid)[0]['leaguePoints']
-        wins = self.client.get_summoner_rank(puuid=puuid)[0]['wins']
-        losses = self.client.get_summoner_rank(puuid=puuid)[0]['losses']
+        tier = rank_data[0]['tier']
+        rank = rank_data[0]['rank']
+        lp = rank_data[0]['leaguePoints']
+        wins = rank_data[0]['wins']
+        losses = rank_data[0]['losses']
 
         info = match_data["info"]
 
@@ -136,3 +179,15 @@ class MatchProducer:
             }
         )
         print(f"{match_id} sent to kafka")
+        self.producer.flush()
+
+    
+def run_producer():
+    print('Run Producer called')
+    producer = MatchProducer()
+    print('Starting producer')
+    producer.start()
+
+
+if __name__ == "__main__":
+    run_producer()

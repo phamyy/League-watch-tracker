@@ -1,5 +1,5 @@
 import requests
-from config import HEADERS, GAME_NAME, TAG_LINE
+from .config import HEADERS, GAME_NAME, TAG_LINE
 
 ACCOUNT_BASE_URL = "https://americas.api.riotgames.com"
 MATCH_BASE_URL = "https://americas.api.riotgames.com"
