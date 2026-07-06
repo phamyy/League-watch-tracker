@@ -2,14 +2,15 @@ from kafka import KafkaConsumer
 import json
 import psycopg2
 import time
-
+import requests
+from .config import databricks_access_token, databricks_hostname,warehouse_id
 
 class AnalyticsConsumer:
     
     def __init__(self):
         self.consumer = self.connect_to_kafka()
-        self.connection = self.connect_to_postgresql()
-        self.cursor = self.connection.cursor()
+        # self.connection = self.connect_to_postgresql()
+        # self.cursor = self.connection.cursor()
 
     def connect_to_kafka(self):
         while True:
@@ -28,6 +29,14 @@ class AnalyticsConsumer:
             except Exception as e:
                 print ('Consumer waiting for Kafka')
                 time.sleep(5)
+    
+    """
+    Want to see if I can migrate the database from kubernetes to Databricks lakehouse. 
+
+    1. Need to set up databricks DB instance
+    2. Create the tables for it 
+    3. See if there's a better way to dump the data instead of just dumping the JSON. (Could also maybe do the transformation upstream in databricks)
+    """
 
     def connect_to_postgresql(self):
         while True:
@@ -56,21 +65,51 @@ class AnalyticsConsumer:
                 print(f"Consumer error: {error}")
 
     def insert_data(self):
+        url = f"https://{databricks_hostname}/api/2.0/sql/statements"
+        headers = {
+            "Authorization": f"Bearer {databricks_access_token}"
+        }
         while True:
             try:
                 for msg in self.consumer:
-                    self.cursor.execute("""
-                    INSERT INTO raw_matches (match_id, payload)
-                    VALUES (%s, %s)
-                    ON CONFLICT (match_id) DO NOTHING
-                    """, (
-                    msg.value['match_id'],
-                    json.dumps(msg.value['payload'])
-                    ))
-                    print(f"data has been pushed for match_id: {msg.value['match_id']}")
-                    self.connection.commit()
+                    
+                    payload = {
+                        "warehouse_id": warehouse_id,
+                        "statement": """
+                            INSERT INTO workspace.league_tracker.raw_matches_bronze
+                            VALUES (:match_id, :payload)
+                        """,
+                        "parameters": [
+                            {"name": "match_id", "value": msg.value['match_id']},
+                            {"name": "payload", "value": json.dumps(msg.value['payload'])}
+                        ]
+                    }
+
+                    response = requests.post(
+                            url,
+                            headers=headers,
+                            json=payload,
+                        )
+
+                    print(f"Status: {response.status_code}")
+                    print(response.json())
+
+                    response.raise_for_status()
+
+
+                    # self.cursor.execute("""
+                    # INSERT INTO raw_matches (match_id, payload)
+                    # VALUES (%s, %s)
+                    # ON CONFLICT (match_id) DO NOTHING
+                    # """, (
+                    # msg.value['match_id'],
+                    # json.dumps(msg.value['payload'])
+                    # ))
+                    # print(f"data has been pushed for match_id: {msg.value['match_id']}")
+                    # self.connection.commit()
             except Exception as error:
                 print(f"Consumer error: {error}")
+    
 
 def run_consumer():
     consumer = AnalyticsConsumer()

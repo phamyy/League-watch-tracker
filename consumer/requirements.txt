@@ -25,3 +25,4 @@ uritemplate==4.2.0
 urllib3==2.7.0
 python-dotenv==1.2.2
 psycopg2 == 2.9.12
+databricks-sdk == 0.119.0
