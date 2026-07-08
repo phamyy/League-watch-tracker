@@ -3,7 +3,8 @@ import json
 import psycopg2
 import time
 import requests
-from .config import databricks_access_token, databricks_hostname,warehouse_id
+from .config import databricks_access_token, databricks_hostname,warehouse_id, databricks_http_path
+from databricks import sql
 
 class AnalyticsConsumer:
     
@@ -65,48 +66,30 @@ class AnalyticsConsumer:
                 print(f"Consumer error: {error}")
 
     def insert_data(self):
-        url = f"https://{databricks_hostname}/api/2.0/sql/statements"
-        headers = {
-            "Authorization": f"Bearer {databricks_access_token}"
-        }
+
         while True:
             try:
                 for msg in self.consumer:
-                    
-                    payload = {
-                        "warehouse_id": warehouse_id,
-                        "statement": """
-                            INSERT INTO workspace.league_tracker.raw_matches_bronze
-                            VALUES (:match_id, :payload)
-                        """,
-                        "parameters": [
-                            {"name": "match_id", "value": msg.value['match_id']},
-                            {"name": "payload", "value": json.dumps(msg.value['payload'])}
-                        ]
-                    }
+                    with sql.connect(server_hostname = databricks_hostname,
+                        http_path       = databricks_http_path,
+                        access_token    = databricks_access_token) as connection:
+                            
+                            cursor = connection.cursor()
 
-                    response = requests.post(
-                            url,
-                            headers=headers,
-                            json=payload,
-                        )
+                            cursor.execute(
+                                """
+                                INSERT INTO workspace.league_tracker.raw_matches_bronze
+                                (match_id, payload)
+                                VALUES (?, ?)
+                                """,
+                                (
+                                    msg.value["match_id"],
+                                    json.dumps(msg.value["payload"])
+                                )
+                            )
+                            print(f"data has been pushed to databricks for match_id: {msg.value['match_id']}")
+                            connection.commit()
 
-                    print(f"Status: {response.status_code}")
-                    print(response.json())
-
-                    response.raise_for_status()
-
-
-                    # self.cursor.execute("""
-                    # INSERT INTO raw_matches (match_id, payload)
-                    # VALUES (%s, %s)
-                    # ON CONFLICT (match_id) DO NOTHING
-                    # """, (
-                    # msg.value['match_id'],
-                    # json.dumps(msg.value['payload'])
-                    # ))
-                    # print(f"data has been pushed for match_id: {msg.value['match_id']}")
-                    # self.connection.commit()
             except Exception as error:
                 print(f"Consumer error: {error}")
     

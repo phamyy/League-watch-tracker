@@ -1,7 +1,7 @@
 import os
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import Unauthenticated, PermissionDenied
-from config import databricks_access_token, databricks_hostname,warehouse_id
+from consumer.config import databricks_access_token, databricks_hostname,warehouse_id
 import requests
 import json
 
