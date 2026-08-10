@@ -1,6 +1,6 @@
 # from datetime import datetime
-from .riot_client import RiotClient
-from .config import HEADERS, GAME_NAME, TAG_LINE
+from ..producer.riot_client import RiotClient
+from ..producer.config import HEADERS, GAME_NAME, TAG_LINE
 # import psycopg2
 # import json
 # from kafka import KafkaProducer

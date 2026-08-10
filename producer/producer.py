@@ -11,7 +11,7 @@ import json
 from kafka import KafkaProducer
 
 
-POLL_INTERVAL = 60
+POLL_INTERVAL = 120
 
 
 """
@@ -28,10 +28,15 @@ class MatchProducer:
         self.client = RiotClient()
         print('RiotClient initialized')
 
-        self.connection = self.connect_to_postgresql()
-        print('Postgresql initialized')
+        # self.connection = self.connect_to_postgresql()
+        # print('Postgresql initialized')
 
-        self.cursor = self.connection.cursor()
+        """
+        Connection to Postgresql no longer exists, need to check data with data that exists in Databricks
+        
+        """
+
+        # self.cursor = self.connection.cursor()
 
         self.producer = self.connect_to_kafka()
         print('Kafka initialized')
@@ -89,35 +94,39 @@ class MatchProducer:
     def poll_matches(self, puuid: str):
         match_ids = self.client.get_recent_match_ids(
             puuid,
-            count=10
+            count=20
         )
-        self.cursor.execute("""
-                select match_id from raw_matches
-                """ )
+        print(f"LENGTH OF MATCH API CALL: {len(match_ids)}")
+        # self.cursor.execute("""
+        #         select match_id from raw_matches
+        #         """ )
 
-        existing_matches = [
-            row[0]
-            for row in self.cursor.fetchall()
-        ]
+        # existing_matches = [
+        #     row[0]
+        #     for row in self.cursor.fetchall()
+        # ]
 
-        print(f"Existing Matches: {existing_matches}")
-        print(f"Type of existing matches: {type(existing_matches)}")
-        print(f"Matches Pulled from API: {match_ids}")
-        print(f"Type of matches pulled from API: {type(match_ids)}")
+        # print(f"Existing Matches: {existing_matches}")
+        # print(f"Type of existing matches: {type(existing_matches)}")
+        # print(f"Matches Pulled from API: {match_ids}")
+        # print(f"Type of matches pulled from API: {type(match_ids)}")
 
         for match_id in match_ids:
             #if the match has been seen / ingested already, pass
             print(f"Now Evaluating: {match_id}")
-            if match_id in existing_matches:
-                print(f"{match_id} already contained in database")
-                continue
+            # if match_id in existing_matches:
+            #     print(f"{match_id} already contained in database")
+            #     continue
             
             print(f"now building match event for {match_id}")
             event = self.build_match_event(match_id)
+            print(f"{event}")
 
             self.send_producer_data_to_kafka(match_id = match_id, payload= event.to_dict())
 
             # self.state.add_match(match_id)
+        
+        print("FINISHED SENDING ALL MATCHES")
 
     def build_match_event(
         self,
@@ -171,15 +180,22 @@ class MatchProducer:
         print(event.to_dict())
 
     def send_producer_data_to_kafka(self, match_id,payload):
-        self.producer.send(
+        future = self.producer.send(
             "match-events",
             {
                 "match_id": match_id,
                 "payload": payload
             }
         )
-        print(f"{match_id} sent to kafka")
-        self.producer.flush()
+
+        metadata = future.get(timeout=10)
+
+        print(
+            f"Sent {match_id} "
+            f"to partition={metadata.partition} "
+            f"offset={metadata.offset}"
+        )
+
 
     
 def run_producer():
