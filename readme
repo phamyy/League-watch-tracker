@@ -1,1 +1,1 @@
-This is a data engineering project focused on real-time streaming data from Riot API, pushed to a grafana dashbaord.
+This is a data engineering project focused on real-time streaming data from the Riot API to track personal player match data and stats. It uses a containerized distributed producer / consumer architecture, where everything is self-running and hosted in Docker. The data is pushed to a downstream Supabase Postgresql database where separate tables model the medallion architecture. The tables are then served to a Tableau dashboard. 
